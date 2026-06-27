@@ -1,0 +1,21 @@
+{
+  "case_id": "example_case",
+  "video_path": "data/raw_videos/example_case.mp4",
+  "source_type": "unknown",
+  "source_url": "",
+  "notes": "Describe provenance, download/export path, original filename, custody gaps and any transformations.",
+  "roi": {
+    "mode": "manual",
+    "x": 100,
+    "y": 100,
+    "width": 160,
+    "height": 160
+  },
+  "frame_window": {
+    "start": 0,
+    "end": null,
+    "step": 1
+  },
+  "output_dir": "data/outputs/example_case",
+  "control_mode": false
+}

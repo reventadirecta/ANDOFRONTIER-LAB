@@ -1,0 +1,5 @@
+{
+  "lab_root": "<LAB_ROOT>",
+  "python_exe": "<LAB_ROOT>/.venv/Scripts/python.exe",
+  "default_batch_id": "<BATCH_ID>"
+}

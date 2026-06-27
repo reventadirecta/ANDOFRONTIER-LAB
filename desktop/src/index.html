@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AndoFrontier UAP Forensic Desktop</title>
+    <link rel="stylesheet" href="./styles/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div>
+          <h1>AndoFrontier UAP Forensic Desktop</h1>
+          <p id="labStatus">Loading lab...</p>
+        </div>
+        <div class="batchControls">
+          <button id="importVideoTop" class="primary">Import Video</button>
+          <button id="openRuntimeTop">Open Runtime Folder</button>
+          <label for="batchSelect">Batch</label>
+          <select id="batchSelect"></select>
+          <button id="reloadBatch">Reload</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="caseList">
+          <div class="panelHeader">
+            <h2>Cases</h2>
+            <span id="caseCount"></span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>case</th>
+                <th>quick</th>
+                <th>tracking</th>
+                <th>review</th>
+              </tr>
+            </thead>
+            <tbody id="casesTable"></tbody>
+          </table>
+        </aside>
+
+        <section class="casePanel">
+          <div class="panelHeader">
+            <h2 id="caseTitle">Select a case</h2>
+            <span id="caseSubtitle"></span>
+          </div>
+          <nav class="tabs" id="moduleTabs"></nav>
+          <div id="moduleContent" class="moduleContent"></div>
+        </section>
+
+        <aside class="detailsPanel">
+          <section>
+            <h2>Case Metadata</h2>
+            <pre id="caseMetadata"></pre>
+          </section>
+
+          <section>
+            <h2>Annotation</h2>
+            <p id="annotationStatus">No case selected.</p>
+            <pre id="requestPreview"></pre>
+          </section>
+
+          <section>
+            <h2>Validation State</h2>
+            <textarea id="validationNotes" placeholder="Validation notes"></textarea>
+            <pre id="validationPreview"></pre>
+          </section>
+
+          <section>
+            <h2>Logs</h2>
+            <pre id="logs"></pre>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>

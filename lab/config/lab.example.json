@@ -1,0 +1,8 @@
+{
+  "lab_root": "<LAB_ROOT>",
+  "data_dir": "<LAB_ROOT>/data",
+  "default_case_id": "<CASE_ID>",
+  "source_video_path": "<SOURCE_VIDEO_PATH>",
+  "outputs_dir": "<OUTPUTS_DIR>",
+  "reports_dir": "<REPORTS_DIR>"
+}

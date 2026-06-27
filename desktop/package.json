@@ -1,0 +1,60 @@
+{
+  "name": "andofrontier-lab",
+  "productName": "AndoFrontier Lab",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Windows desktop app for AndoFrontier Lab forensic video analysis.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "smoke": "node electron/smoke.js",
+    "package": "electron-builder --dir",
+    "dist:win": "electron-builder --win portable && node electron/after-dist.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "lab.andofrontier.app",
+    "productName": "AndoFrontier Lab",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "config/lab.local.example.json",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "config/lab.local.example.json",
+        "to": "config/lab.local.example.json"
+      },
+      {
+        "from": "../release_build/backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "AndoFrontier Lab.exe"
+    }
+  }
+}
