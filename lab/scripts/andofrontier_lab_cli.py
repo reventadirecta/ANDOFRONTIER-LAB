@@ -154,89 +154,115 @@ def init_runtime(args: argparse.Namespace) -> int:
     )
 
 
+def _load_local_batch(data_root: Path) -> tuple[dict, Path]:
+    batch_dir = data_root / "batches" / "local_batch"
+    manifest_path = batch_dir / "batch_manifest.json"
+    manifest = _read_json_or_default(
+        manifest_path,
+        {
+            "batch_id": "local_batch",
+            "cases": [],
+            "created_by": "AndoFrontier Lab",
+            "schema_version": "0.3",
+        },
+    )
+    manifest.setdefault("batch_id", "local_batch")
+    manifest.setdefault("created_by", "AndoFrontier Lab")
+    manifest.setdefault("schema_version", "0.3")
+    manifest.setdefault("cases", [])
+    return manifest, manifest_path
+
+
+def _unique_import_case_dir(data_root: Path, timestamp: str, video: Path, used: set[str]) -> tuple[str, Path]:
+    base_case_id = f"case_{timestamp}_{_safe_slug(video.name)}"
+    case_id = base_case_id
+    case_dir = data_root / "cases" / case_id
+    counter = 2
+    while case_id in used or case_dir.exists():
+        case_id = f"{base_case_id}_{counter}"
+        case_dir = data_root / "cases" / case_id
+        counter += 1
+    used.add(case_id)
+    return case_id, case_dir
+
+
+def _import_one_video(data_root: Path, manifest: dict, manifest_path: Path, video: Path, timestamp: str, used: set[str]) -> dict:
+    video = video.resolve()
+    if not video.exists() or not video.is_file():
+        raise FileNotFoundError(f"Video not found: {video}")
+    if video.suffix.lower() not in VIDEO_EXTENSIONS:
+        raise ValueError(f"Unsupported file type: {video}")
+
+    case_id, case_dir = _unique_import_case_dir(data_root, timestamp, video, used)
+    source_dir = case_dir / "source"
+    source_dir.mkdir(parents=True, exist_ok=False)
+    copied_video = source_dir / video.name
+    shutil.copy2(video, copied_video)
+
+    now = dt.datetime.now(dt.timezone.utc).astimezone()
+    technical = _technical_metadata(copied_video)
+    metadata = {
+        "case_id": case_id,
+        "source_video": f"source/{video.name}",
+        "video_path": str(copied_video),
+        "original_filename": video.name,
+        "created_at": now.isoformat(timespec="seconds"),
+        "status": "imported",
+        "tracking_status": "not_started",
+        "track_based_analysis_ready": False,
+        "notes": "",
+        "import_mode": "copied",
+        "source_quality": "user_imported_unverified",
+        **technical,
+    }
+    _write_json(case_dir / "case_metadata.json", metadata)
+
+    case_entry = {
+        "case_id": case_id,
+        "video_path": str(copied_video),
+        "original_filename": video.name,
+        "priority": "imported",
+        "quick_priority": "not_run",
+        "tracking_status": "tracking_not_run",
+        "review_status": "tracking_required",
+        "source_quality": "user_imported_unverified",
+        **technical,
+    }
+    manifest["cases"] = [item for item in manifest["cases"] if item.get("case_id") != case_id]
+    manifest["cases"].append(case_entry)
+    _write_json(manifest_path, manifest)
+    return {
+        "case_id": case_id,
+        "case_dir": str(case_dir),
+        "source_video": str(copied_video),
+        "original_filename": video.name,
+        "metadata_path": str(case_dir / "case_metadata.json"),
+    }
+
+
 def import_video(args: argparse.Namespace) -> int:
     try:
         runtime_root = Path(args.runtime_root).resolve()
-        video = Path(args.video).resolve()
-        if not video.exists() or not video.is_file():
-            return _json({"ok": False, "error": f"Video not found: {video}"})
-        if video.suffix.lower() not in VIDEO_EXTENSIONS:
-            return _json({"ok": False, "error": "Unsupported file type."})
+        videos = [Path(item).resolve() for item in args.video]
+        if not videos:
+            return _json({"ok": False, "error": "At least one --video is required."})
 
         created = _initialize_runtime(runtime_root)
         data_root = Path(created["data_root"])
-        batch_id = "local_batch"
-        now = dt.datetime.now(dt.timezone.utc).astimezone()
-        timestamp = now.strftime("%Y%m%d_%H%M%S")
-        base_case_id = f"case_{timestamp}_{_safe_slug(video.name)}"
-        case_id = base_case_id
-        case_dir = data_root / "cases" / case_id
-        counter = 2
-        while case_dir.exists():
-            case_id = f"{base_case_id}_{counter}"
-            case_dir = data_root / "cases" / case_id
-            counter += 1
-
-        source_dir = case_dir / "source"
-        source_dir.mkdir(parents=True, exist_ok=True)
-        copied_video = source_dir / video.name
-        shutil.copy2(video, copied_video)
-
-        technical = _technical_metadata(copied_video)
-        metadata = {
-            "case_id": case_id,
-            "source_video": f"source/{video.name}",
-            "video_path": str(copied_video),
-            "original_filename": video.name,
-            "created_at": now.isoformat(timespec="seconds"),
-            "status": "imported",
-            "tracking_status": "not_started",
-            "track_based_analysis_ready": False,
-            "notes": "",
-            "import_mode": "copied",
-            "source_quality": "user_imported_unverified",
-            **technical,
-        }
-        _write_json(case_dir / "case_metadata.json", metadata)
-
-        batch_dir = data_root / "batches" / batch_id
-        manifest_path = batch_dir / "batch_manifest.json"
-        manifest = _read_json_or_default(
-            manifest_path,
-            {
-                "batch_id": batch_id,
-                "cases": [],
-                "created_by": "AndoFrontier Lab",
-                "schema_version": "0.3",
-            },
-        )
-        manifest.setdefault("batch_id", batch_id)
-        manifest.setdefault("created_by", "AndoFrontier Lab")
-        manifest.setdefault("schema_version", "0.3")
-        manifest.setdefault("cases", [])
-        case_entry = {
-            "case_id": case_id,
-            "video_path": str(copied_video),
-            "original_filename": video.name,
-            "priority": "imported",
-            "quick_priority": "not_run",
-            "tracking_status": "tracking_not_run",
-            "review_status": "tracking_required",
-            "source_quality": "user_imported_unverified",
-            **technical,
-        }
-        manifest["cases"] = [item for item in manifest["cases"] if item.get("case_id") != case_id]
-        manifest["cases"].append(case_entry)
-        _write_json(manifest_path, manifest)
-
+        manifest, manifest_path = _load_local_batch(data_root)
+        timestamp = dt.datetime.now(dt.timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
+        used = {str(item.get("case_id")) for item in manifest.get("cases", []) if item.get("case_id")}
+        imported = [_import_one_video(data_root, manifest, manifest_path, video, timestamp, used) for video in videos]
         return _json(
             {
                 "ok": True,
-                "case_id": case_id,
-                "case_dir": str(case_dir),
-                "source_video": str(copied_video),
-                "batch_id": batch_id,
+                "batch_id": "local_batch",
                 "manifest_path": str(manifest_path),
+                "imported_count": len(imported),
+                "imported_cases": imported,
+                "case_id": imported[0]["case_id"],
+                "case_dir": imported[0]["case_dir"],
+                "source_video": imported[0]["source_video"],
             }
         )
     except Exception as exc:
@@ -267,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("health")
     import_parser = sub.add_parser("import-video")
     import_parser.add_argument("--runtime-root", required=True)
-    import_parser.add_argument("--video", required=True)
+    import_parser.add_argument("--video", required=True, action="append")
     init_parser = sub.add_parser("init-runtime")
     init_parser.add_argument("--runtime-root", required=True)
     sub.add_parser("list-cases")

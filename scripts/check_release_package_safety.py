@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_DIR = ROOT / "release_build" / "AndoFrontier-Lab-v0.3-Windows"
+PACKAGE_DIR = ROOT / "release_build" / "AndoFrontier-Lab-v0.3.1-Windows"
 LOCAL_USERNAME_PATTERN = "pm" + "cga"
 
 SKIP_SUFFIXES = {

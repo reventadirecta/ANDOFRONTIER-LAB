@@ -1247,13 +1247,19 @@ async function openRuntimeFolder() {
   await openTarget(target);
 }
 
-async function importVideo(videoPath = null) {
-  if (videoPath && !isSupportedVideoPath(videoPath)) {
-    log("Unsupported file type.");
+async function importVideo(videoPathOrPaths = null) {
+  const videoPaths = Array.isArray(videoPathOrPaths)
+    ? videoPathOrPaths
+    : (videoPathOrPaths ? [videoPathOrPaths] : []);
+  const unsupported = videoPaths.filter((item) => !isSupportedVideoPath(item));
+  if (unsupported.length) {
+    log(`Unsupported file type: ${unsupported[0]}`);
     return;
   }
-  log("Import Video: selecting/copying local video into portable runtime.");
-  const result = await window.forensicDesk.importVideo(videoPath ? { videoPath } : {});
+  log(videoPaths.length > 1
+    ? `Import Video: copying ${videoPaths.length} local videos into independent cases.`
+    : "Import Video: selecting/copying local video into portable runtime.");
+  const result = await window.forensicDesk.importVideo(videoPaths.length ? { videoPaths } : {});
   if (result.canceled) {
     log(result.message || "Import cancelled.");
     return;
@@ -1263,10 +1269,13 @@ async function importVideo(videoPath = null) {
     if (result.stderr) log(`stderr: ${result.stderr}`);
     return;
   }
-  log(`Imported video as ${result.case_id}`);
-  log(`Copied source: ${result.source_video}`);
+  const importedCases = result.imported_cases || [{ case_id: result.case_id, source_video: result.source_video }];
+  log(`Imported ${importedCases.length} video(s) as independent case(s).`);
+  for (const item of importedCases) {
+    log(`Imported ${item.original_filename || ""} -> ${item.case_id}`);
+  }
   await refreshBatchSelect(result.batch_id);
-  await loadBatch(result.case_id);
+  await loadBatch(importedCases[0]?.case_id || result.case_id);
 }
 
 function bindEvents() {
@@ -1333,13 +1342,13 @@ function bindEvents() {
     event.preventDefault();
     const zone = event.target.closest("#videoDropZone");
     if (zone) zone.classList.remove("dragOver");
-    const file = event.dataTransfer?.files?.[0];
-    const filePath = file?.path || "";
-    if (!filePath) {
+    const files = Array.from(event.dataTransfer?.files || []);
+    const filePaths = files.map((file) => file.path).filter(Boolean).filter(isSupportedVideoPath);
+    if (!filePaths.length) {
       log("Drag and drop did not expose a local file path. Use Import Video.");
       return;
     }
-    await importVideo(filePath);
+    await importVideo(filePaths);
   });
   $("moduleContent").addEventListener("pointerdown", (event) => {
     if (event.target.id !== "annotationCanvas") return;

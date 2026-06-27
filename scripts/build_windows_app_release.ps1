@@ -3,8 +3,8 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $ReleaseRoot = Join-Path $RepoRoot "release_build"
 $BackendDir = Join-Path $ReleaseRoot "backend"
-$PortableDir = Join-Path $ReleaseRoot "AndoFrontier-Lab-v0.3-Windows"
-$ZipPath = Join-Path $ReleaseRoot "AndoFrontier-Lab-v0.3-Windows.zip"
+$PortableDir = Join-Path $ReleaseRoot "AndoFrontier-Lab-v0.3.1-Windows"
+$ZipPath = Join-Path $ReleaseRoot "AndoFrontier-Lab-v0.3.1-Windows.zip"
 $DesktopDir = Join-Path $RepoRoot "desktop"
 
 Remove-Item -Recurse -Force $ReleaseRoot -ErrorAction SilentlyContinue

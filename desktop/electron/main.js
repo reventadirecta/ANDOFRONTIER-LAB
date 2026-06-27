@@ -668,11 +668,13 @@ ipcMain.handle("batch:get", async (_event, batchId) => {
 ipcMain.handle("case:importVideo", async (_event, payload = {}) => {
   const config = loadConfig();
   const allowedExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm"];
-  let videoPath = payload.videoPath || null;
-  if (!videoPath) {
+  let videoPaths = Array.isArray(payload.videoPaths)
+    ? payload.videoPaths
+    : (payload.videoPath ? [payload.videoPath] : []);
+  if (!videoPaths.length) {
     const result = await dialog.showOpenDialog({
       title: "Import Video",
-      properties: ["openFile"],
+      properties: ["openFile", "multiSelections"],
       filters: [
         { name: "Video files", extensions: ["mp4", "mov", "avi", "mkv", "webm"] }
       ]
@@ -680,14 +682,19 @@ ipcMain.handle("case:importVideo", async (_event, payload = {}) => {
     if (result.canceled || !result.filePaths.length) {
       return { ok: false, canceled: true, message: "Import cancelled." };
     }
-    videoPath = result.filePaths[0];
+    videoPaths = result.filePaths;
   }
-  const extension = path.extname(videoPath).toLowerCase();
-  if (!allowedExtensions.includes(extension)) {
-    return { ok: false, error: "Unsupported file type." };
+  videoPaths = [...new Set(videoPaths.map((item) => path.resolve(item)))];
+  const unsupported = videoPaths.filter((videoPath) => !allowedExtensions.includes(path.extname(videoPath).toLowerCase()));
+  if (unsupported.length) {
+    return { ok: false, error: `Unsupported file type: ${unsupported[0]}` };
   }
   const runtimeRoot = config.packaged_backend ? config.writable_runtime_root : config.lab_root;
-  const imported = await runBackendJson(config, "import-video", ["--runtime-root", runtimeRoot, "--video", videoPath]);
+  const args = ["--runtime-root", runtimeRoot];
+  for (const videoPath of videoPaths) {
+    args.push("--video", videoPath);
+  }
+  const imported = await runBackendJson(config, "import-video", args);
   if (!imported.ok) {
     return { ...imported, error: imported.error || "Import failed." };
   }
