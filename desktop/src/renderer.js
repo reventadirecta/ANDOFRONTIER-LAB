@@ -10,7 +10,8 @@ const MODULES = [
   ["pca", "PCA"],
   ["autoencoder", "Autoencoder"],
   ["reports", "Reports"],
-  ["publicSummary", "Public Summary"]
+  ["publicSummary", "Public Summary"],
+  ["evidenceVideo", "Evidence Video Export"]
 ];
 
 const VIDEO_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv", ".webm"];
@@ -30,6 +31,7 @@ const state = {
   lastProgressPercent: null,
   pcaRunStatus: "idle",
   autoencoderRunStatus: "idle",
+  evidenceVideoRunStatus: "idle",
   drawing: false,
   start: null,
   current: null,
@@ -113,6 +115,7 @@ function moduleStatus(moduleId) {
   if (moduleId === "autoencoder") return gates.autoencoder_analysis_ready ? { status: "available", label: "autoencoder ready", locked: false } : { status: "validated", label: "ready to run", locked: false };
   if (["reports"].includes(moduleId)) return { status: "available", label: "available output", locked: false };
   if (moduleId === "publicSummary") return gates.reddit_template_ready ? { status: "available", label: "reddit template ready", locked: false } : { status: gates.unified_report_ready ? "validated" : "pending", label: gates.unified_report_ready ? "ready to generate" : "requires unified report", locked: false };
+  if (moduleId === "evidenceVideo") return gates.evidence_video_export_ready ? { status: "available", label: "video exports ready", locked: false } : { status: "validated", label: "ready to export", locked: false };
   return { status: "placeholder", label: "not available yet", locked: false };
 }
 
@@ -246,7 +249,8 @@ function renderActiveTab() {
     autoencoder: renderAutoencoder,
     controls: renderControls,
     reports: renderReports,
-    publicSummary: renderPublicSummary
+    publicSummary: renderPublicSummary,
+    evidenceVideo: renderEvidenceVideo
   };
   $("moduleContent").innerHTML = (renderers[state.activeTab] || renderOverview)();
   afterTabRender();
@@ -757,6 +761,39 @@ function renderPublicSummary() {
   `;
 }
 
+function renderEvidenceVideo() {
+  const cs = state.caseState;
+  const manifest = cs.metrics.video_export || {};
+  const statusLabel = state.evidenceVideoRunStatus === "running"
+    ? "Exporting..."
+    : (cs.gates.evidence_video_export_ready ? "exports ready" : "not exported");
+  return `
+    ${moduleHeader("Evidence Video Export", "evidenceVideo", "Existing case outputs: tracking overlay, scorecard, panels, reports", "16:9, 9:16 and 1:1 MP4 evidence/review videos")}
+    <div class="emptyState">Local review module. It composes existing outputs only; it does not recalculate ROI, upload media, publish content, or make an origin claim.</div>
+    <div class="cards">
+      ${card("Export State", `${kv("status", statusLabel)}${kv("output folder", cs.paths.video_export_folder)}${kv("manifest", cs.assets.video_export_manifest.exists ? "ready" : "missing")}`)}
+      ${card("Available Inputs", `${kv("tracking overlay", exists(cs.assets.overlay) ? "ready" : "missing")}${kv("scorecard", exists(cs.assets.unified_scorecard) ? "ready" : "missing")}${kv("motion", exists(cs.assets.motion_trajectory_panel) ? "ready" : "missing")}${kv("spectral FFT", exists(cs.assets.spectral_fft_panel) ? "ready" : "missing")}${kv("thermal", exists(cs.assets.thermal_intensity_panel) ? "ready" : "missing")}${kv("controls", exists(cs.assets.controls_summary_panel) ? "ready" : "missing")}${kv("PCA", exists(cs.assets.pca_scatter_panel) ? "ready" : "missing")}${kv("autoencoder", exists(cs.assets.autoencoder_summary_panel) ? "ready" : "missing")}`)}
+      ${card("Manifest", manifest.outputs ? `<pre>${pretty(manifest.outputs)}</pre>` : "Run export to populate manifest.")}
+    </div>
+    <div class="buttonRow">
+      <select id="evidenceVideoFormat">
+        <option value="all">all formats</option>
+        <option value="16x9">16:9 horizontal</option>
+        <option value="9x16">9:16 vertical</option>
+        <option value="1x1">1:1 square</option>
+      </select>
+      <button id="exportEvidenceVideo" class="primary" ${state.evidenceVideoRunStatus === "running" ? "disabled" : ""}>${state.evidenceVideoRunStatus === "running" ? "Exporting..." : "Export Evidence Video"}</button>
+      <button data-open="${cs.paths.video_export_folder}">Open video exports folder</button>
+      <button data-open="${cs.paths.video_export_manifest}">Open manifest</button>
+    </div>
+    <div class="assetGrid">
+      ${videoFigure("16:9 evidence video", cs.assets.video_export_16x9)}
+      ${videoFigure("9:16 evidence video", cs.assets.video_export_9x16)}
+      ${videoFigure("1:1 evidence video", cs.assets.video_export_1x1)}
+    </div>
+  `;
+}
+
 function shellModule(title, id, req, outputs, button, warning = "Not available yet") {
   return `${moduleHeader(title, id, req, outputs)}<div class="emptyState">${warning}</div><button disabled>${button} - not implemented yet</button>`;
 }
@@ -775,6 +812,10 @@ function fmt(value) {
 
 function imageFigure(label, asset) {
   return `<figure><figcaption>${label}</figcaption>${imageIf(asset, label)}</figure>`;
+}
+
+function videoFigure(label, asset) {
+  return `<figure><figcaption>${label}</figcaption>${videoIf(asset, label)}</figure>`;
 }
 
 function reportLink(label, asset, filePath) {
@@ -1236,6 +1277,32 @@ async function generateRedditTemplate() {
   renderActiveTab();
 }
 
+async function exportEvidenceVideo() {
+  if (!state.selectedCase) return;
+  const select = $("evidenceVideoFormat");
+  const format = select?.value || "all";
+  state.evidenceVideoRunStatus = "running";
+  renderActiveTab();
+  log(`Exporting evidence video for ${state.selectedCase} (${format})`);
+  try {
+    const result = await window.forensicDesk.exportEvidenceVideo({ caseId: state.selectedCase, format });
+    log(`Command: ${result.command}`);
+    log(`CWD: ${result.cwd}`);
+    log(`Exit code: ${result.code}`);
+    log(`Log: ${result.log_path}`);
+    log(`Evidence video outputs: ${pretty(result.outputs)}`);
+    if (result.stderr) log(`stderr: ${result.stderr}`);
+    state.evidenceVideoRunStatus = result.ok ? "ready" : "failed";
+  } catch (error) {
+    state.evidenceVideoRunStatus = "failed";
+    log(`Evidence video export failed: ${error.message}`);
+  }
+  state.caseState = await window.forensicDesk.getCaseState(state.batchId, state.selectedCase);
+  if (state.caseState?.gates?.evidence_video_export_ready) state.evidenceVideoRunStatus = "ready";
+  renderTabs();
+  renderActiveTab();
+}
+
 async function openTarget(targetPath) {
   const result = await window.forensicDesk.openPath(targetPath);
   if (!result.ok) log(`Open failed: ${result.error}`);
@@ -1326,6 +1393,7 @@ function bindEvents() {
     if (target.id === "runQuickAutoencoder") await runAutoencoderAnalysis(true);
     if (target.id === "generateUnifiedReport") await generateUnifiedReport();
     if (target.id === "generateRedditTemplate") await generateRedditTemplate();
+    if (target.id === "exportEvidenceVideo") await exportEvidenceVideo();
     const openButton = target.closest("[data-open]");
     if (openButton) await openTarget(openButton.dataset.open);
   });

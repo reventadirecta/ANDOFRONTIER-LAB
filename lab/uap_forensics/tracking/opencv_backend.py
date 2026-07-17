@@ -144,6 +144,41 @@ def _line_hud_score(gray: np.ndarray, bbox: list[int], width: int, height: int) 
     return line_score, "+".join(reasons) or "shape_ok"
 
 
+def _black_overlay_score(gray: np.ndarray, bbox: list[int], width: int, height: int) -> tuple[float, str]:
+    x, y, w, h = bbox
+    crop = gray[y : y + h, x : x + w]
+    if crop.size == 0:
+        return 1.0, "empty_candidate"
+    dark_ratio = float(np.mean(crop < 18))
+    very_dark_ratio = float(np.mean(crop < 8))
+    std = float(np.std(crop))
+    aspect = w / max(1, h)
+    area_ratio = (w * h) / max(1.0, width * height)
+    near_video_overlay_band = (
+        y < height * 0.18
+        or y + h > height * 0.88
+        or x < width * 0.08
+        or x + w > width * 0.92
+    )
+    rectangular_label_shape = 1.7 <= aspect <= 9.5 and area_ratio >= 0.00035
+    uniform_black_block = dark_ratio > 0.62 and std < 34.0
+    score = 0.0
+    reasons: list[str] = []
+    if uniform_black_block:
+        score = max(score, 0.72 + min(0.22, (dark_ratio - 0.62) * 0.6))
+        reasons.append("uniform_black_block")
+    if very_dark_ratio > 0.55 and rectangular_label_shape:
+        score = max(score, 0.86)
+        reasons.append("black_rectangular_label")
+    if near_video_overlay_band and (dark_ratio > 0.45 or very_dark_ratio > 0.30):
+        score = max(score, 0.82)
+        reasons.append("overlay_band_dark_region")
+    if near_video_overlay_band and rectangular_label_shape and dark_ratio > 0.35:
+        score = max(score, 0.90)
+        reasons.append("fixed_hud_label_geometry")
+    return min(1.0, score), "+".join(reasons) or "not_black_overlay"
+
+
 def _hud_rejection(
     frame: np.ndarray,
     bbox: list[int],
@@ -151,11 +186,13 @@ def _hud_rejection(
     predicted: list[int],
     initial: list[int],
     recent_centers: list[tuple[float, float]],
+    template_score: float | None = None,
 ) -> tuple[bool, float, str]:
     height, width = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     hud_overlap = _hud_overlap_score(bbox, width, height)
     line_score, line_reason = _line_hud_score(gray, bbox, width, height)
+    black_score, black_reason = _black_overlay_score(gray, bbox, width, height)
     jump = _distance(_center(bbox), _center(predicted))
     previous_jump = _distance(_center(bbox), _center(previous))
     max_reasonable_jump = max(width, height) * 0.14
@@ -173,7 +210,13 @@ def _hud_rejection(
         recent_motion = np.mean([_distance(recent_centers[i], recent_centers[i - 1]) for i in range(1, len(recent_centers))])
         if recent_motion > 1.5 and max(_distance(candidate_center, c) for c in recent_centers[-5:]) < 1.2:
             fixed_score = 0.75
-    score = max(hud_overlap * 0.85, line_score, fixed_score)
+    template_value = 1.0 if template_score is None else float(template_score)
+    template_mismatch = template_score is not None and template_value < 0.16
+    score = max(hud_overlap * 0.85, line_score, black_score, fixed_score)
+    if black_score >= 0.86 and (previous_jump > max_reasonable_jump * 0.35 or hud_overlap > 0.35 or template_mismatch):
+        return True, max(score, 0.90), black_reason
+    if black_score >= 0.78 and template_mismatch and previous_jump > max_reasonable_jump * 0.18:
+        return True, max(score, 0.86), f"{black_reason}+template_mismatch"
     if candidate_on_center_hud and initial_was_not_center_hud and hud_overlap > 0.72:
         return True, max(score, 0.88), "reticle_hud_overlap"
     if jump > max_reasonable_jump and hud_overlap > 0.45:
@@ -184,7 +227,10 @@ def _hud_rejection(
     if area_ratio < 0.25 or area_ratio > 4.0:
         return True, max(score, 0.75), "size_drift"
     if score >= 0.80:
-        reason = "reticle_hud_overlap" if hud_overlap >= line_score else line_reason
+        if black_score >= hud_overlap and black_score >= line_score:
+            reason = black_reason
+        else:
+            reason = "reticle_hud_overlap" if hud_overlap >= line_score else line_reason
         return True, score, reason
     return False, score, "accepted_candidate"
 
@@ -255,19 +301,21 @@ def _recover_candidate(
     window = _clip_bbox([px - margin, py - margin, pw + margin * 2, ph + margin * 2], width, height)
     best: tuple[float, list[int], str, float] | None = None
     for candidate in _candidate_components(gray, window, initial):
-        rejected, hud_score, reason = _hud_rejection(frame, candidate, previous, predicted, initial, recent_centers)
+        template_match = _template_score(gray, candidate, templates)
+        rejected, hud_score, reason = _hud_rejection(frame, candidate, previous, predicted, initial, recent_centers, template_match)
         if rejected:
             return None, 0.0, "recovery_candidate_rejected_hud", {
                 "candidate_rejected": True,
                 "reason": reason,
                 "hud_overlap_score": round(hud_score, 3),
+                "template_score": round(template_match, 3),
                 "bbox": _bbox_dict(candidate),
             }
         contrast, polarity = _local_contrast(gray, candidate)
         proximity = max(0.0, 1.0 - _distance(_center(candidate), _center(predicted)) / max(1.0, max(width, height) * 0.25))
         area_ratio = (candidate[2] * candidate[3]) / max(1, initial[2] * initial[3])
         size_score = max(0.0, 1.0 - abs(math.log(max(0.05, area_ratio))))
-        template = max(0.0, _template_score(gray, candidate, templates))
+        template = max(0.0, template_match)
         score = 0.32 * contrast + 0.24 * proximity + 0.24 * size_score + 0.20 * template
         if best is None or score > best[0]:
             best = (score, candidate, polarity, template)
@@ -412,32 +460,36 @@ class OpenCVBackend(TrackingBackend):
                 tracked, raw_box = tracker.update(frame)
                 if tracked:
                     raw_current = _clip_bbox([int(round(v)) for v in raw_box], width, height)
-                    rejected, hud_score, reject_reason = _hud_rejection(frame, raw_current, previous, predicted, initial_box, recent_centers)
+                    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    template_match = _template_score(frame_gray, raw_current, templates)
+                    rejected, hud_score, reject_reason = _hud_rejection(frame, raw_current, previous, predicted, initial_box, recent_centers, template_match)
                     if rejected:
                         hud_rejected += 1
                         if "reticle" in reject_reason or "cross" in reject_reason:
                             reticle_rejected += 1
-                        if "hud" in reject_reason or "reticle" in reject_reason:
+                        if "hud" in reject_reason or "reticle" in reject_reason or "overlay" in reject_reason or "black" in reject_reason:
                             drift_to_hud = True
                         rejection = {
                             "candidate_rejected": True,
                             "reason": reject_reason,
                             "hud_overlap_score": round(hud_score, 3),
+                            "template_score": round(template_match, 3),
                             "rejected_bbox": _bbox_dict(raw_current),
                         }
                     else:
-                        contrast, polarity = _local_contrast(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), raw_current)
+                        contrast, polarity = _local_contrast(frame_gray, raw_current)
                         if contrast < 0.06:
                             rejection = {
                                 "candidate_rejected": True,
                                 "reason": "insufficient_local_contrast",
                                 "hud_overlap_score": round(hud_score, 3),
+                                "template_score": round(template_match, 3),
                                 "rejected_bbox": _bbox_dict(raw_current),
                             }
                         else:
                             current = raw_current
-                            confidence = min(0.92, 0.58 + contrast * 0.30)
-                            reason = f"tracker update polarity={polarity} contrast={contrast:.2f}"
+                            confidence = min(0.92, 0.52 + contrast * 0.28 + max(0.0, template_match) * 0.12)
+                            reason = f"tracker update polarity={polarity} contrast={contrast:.2f} template={template_match:.2f}"
                 else:
                     rejection = {"candidate_rejected": True, "reason": "OpenCV tracker update failed", "hud_overlap_score": 0.0}
 
@@ -448,7 +500,8 @@ class OpenCVBackend(TrackingBackend):
                         hud_rejected += 1
                         if "reticle" in rec_rejection.get("reason", ""):
                             reticle_rejected += 1
-                        drift_to_hud = drift_to_hud or "hud" in rec_rejection.get("reason", "")
+                        rec_reason_text = rec_rejection.get("reason", "")
+                        drift_to_hud = drift_to_hud or any(marker in rec_reason_text for marker in ["hud", "reticle", "overlay", "black"])
                         rejection = {**(rejection or {}), "recovery_rejection": rec_rejection}
                     if recovered is not None:
                         current = recovered

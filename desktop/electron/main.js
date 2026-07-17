@@ -125,6 +125,7 @@ function fileUrl(filePath, cacheBust = false) {
 function backendCommand(config, command, args = []) {
   if (config.packaged_backend) {
     return {
+      command: config.python_exe,
       exe: config.python_exe,
       args: [command, ...args],
       cwd: config.lab_root,
@@ -133,6 +134,7 @@ function backendCommand(config, command, args = []) {
   }
   const cliScript = path.join(config.lab_root, "scripts", "andofrontier_lab_cli.py");
   return {
+    command: config.python_exe,
     exe: config.python_exe,
     args: [cliScript, command, ...args],
     cwd: config.lab_root,
@@ -166,6 +168,35 @@ function runBackendJson(config, command, args = []) {
     });
     child.on("error", (error) => {
       resolve({ ok: false, command: cmd.text, error: error.message, stdout, stderr });
+    });
+  });
+}
+
+function runCommandCapture(exe, args, cwd, logPath, onData = null) {
+  return new Promise((resolve) => {
+    const child = spawn(exe, args, { cwd, windowsHide: true });
+    const stream = fs.createWriteStream(logPath, { flags: "a" });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (data) => {
+      const text = data.toString();
+      stdout += text;
+      stream.write(text);
+      if (onData) onData(text);
+    });
+    child.stderr.on("data", (data) => {
+      const text = data.toString();
+      stderr += text;
+      stream.write(text);
+      if (onData) onData(text);
+    });
+    child.on("close", (code) => {
+      stream.end();
+      resolve({ code, stdout, stderr });
+    });
+    child.on("error", (error) => {
+      stream.end();
+      resolve({ code: 1, stdout, stderr, error: error.message });
     });
   });
 }
@@ -324,6 +355,11 @@ function loadCaseState(batchId, caseId) {
   const redditTemplateTitlesEnPath = path.join(redditTemplateFolder, "reddit_title_options_en.txt");
   const redditTemplateDataPath = path.join(redditTemplateFolder, "reddit_post_data.json");
   const redditTemplateManifestPath = path.join(redditTemplateFolder, "reddit_template_manifest.md");
+  const videoExportFolder = reportPath(caseId, "video_exports");
+  const videoExportManifestPath = path.join(videoExportFolder, "video_export_manifest.json");
+  const videoExport16x9Path = path.join(videoExportFolder, `${caseId}_16x9.mp4`);
+  const videoExport9x16Path = path.join(videoExportFolder, `${caseId}_9x16.mp4`);
+  const videoExport1x1Path = path.join(videoExportFolder, `${caseId}_1x1.mp4`);
   const srvFolder = outputPath(caseId, "srv_analysis");
   const srvMetricsPath = path.join(srvFolder, "srv_metrics.json");
   const srvTimeseriesPath = path.join(srvFolder, "srv_timeseries.csv");
@@ -348,6 +384,7 @@ function loadCaseState(batchId, caseId) {
   const unifiedSummary = safeReadJson(unifiedSummaryPath);
   const unifiedMetricsCard = safeReadJson(unifiedMetricsCardPath);
   const redditTemplateData = safeReadJson(redditTemplateDataPath);
+  const videoExportManifest = safeReadJson(videoExportManifestPath);
   const srvMetrics = safeReadJson(srvMetricsPath);
   const srvCoreMetrics = safeReadJson(srvCoreMetricsPath);
   const caseStatus = safeReadJson(caseStatusPath);
@@ -365,6 +402,9 @@ function loadCaseState(batchId, caseId) {
   const autoencoderReady = fs.existsSync(autoencoderMetricsPath) && fs.existsSync(autoencoderTimeseriesPath);
   const unifiedReady = fs.existsSync(unifiedReportPath) && fs.existsSync(unifiedSummaryPath);
   const redditTemplateReady = fs.existsSync(redditTemplateEnPath) && fs.existsSync(redditTemplateDataPath);
+  const videoExportReady = fs.existsSync(videoExportManifestPath) && (
+    fs.existsSync(videoExport16x9Path) || fs.existsSync(videoExport9x16Path) || fs.existsSync(videoExport1x1Path)
+  );
   const srvReady = fs.existsSync(srvMetricsPath) && fs.existsSync(srvTimeseriesPath);
   const srvCoreReady = fs.existsSync(srvCoreMetricsPath) && fs.existsSync(srvCoreRoisPath);
   let reviewStatus = "tracking_required";
@@ -390,6 +430,7 @@ function loadCaseState(batchId, caseId) {
       autoencoder_analysis_ready: autoencoderReady,
       unified_report_ready: unifiedReady,
       reddit_template_ready: redditTemplateReady,
+      evidence_video_export_ready: videoExportReady,
       srv_analysis_ready: srvReady,
       srv_object_core_ready: srvCoreReady
     },
@@ -457,6 +498,11 @@ function loadCaseState(batchId, caseId) {
       reddit_template_titles_en: redditTemplateTitlesEnPath,
       reddit_template_data: redditTemplateDataPath,
       reddit_template_manifest: redditTemplateManifestPath,
+      video_export_folder: videoExportFolder,
+      video_export_manifest: videoExportManifestPath,
+      video_export_16x9: videoExport16x9Path,
+      video_export_9x16: videoExport9x16Path,
+      video_export_1x1: videoExport1x1Path,
       srv_folder: srvFolder,
       srv_metrics: srvMetricsPath,
       srv_timeseries: srvTimeseriesPath,
@@ -551,6 +597,10 @@ function loadCaseState(batchId, caseId) {
       unified_manifest: asset(unifiedManifestPath),
       reddit_template_en: asset(redditTemplateEnPath),
       reddit_template_manifest: asset(redditTemplateManifestPath),
+      video_export_manifest: asset(videoExportManifestPath),
+      video_export_16x9: asset(videoExport16x9Path, true),
+      video_export_9x16: asset(videoExport9x16Path, true),
+      video_export_1x1: asset(videoExport1x1Path, true),
       srv_report: asset(srvReportPath),
       srv_manifest: asset(srvManifestPath),
       srv_core_manifest: asset(srvCoreManifestPath)
@@ -568,6 +618,7 @@ function loadCaseState(batchId, caseId) {
       unified: unifiedSummary || null,
       unified_card: unifiedMetricsCard || null,
       reddit_template: redditTemplateData || null,
+      video_export: videoExportManifest || null,
       srv: srvMetrics || null,
       srv_core: srvCoreMetrics || null,
       crops: countFiles(path.join(trackBasedFolder, "crops"), ".png"),
@@ -1187,6 +1238,35 @@ ipcMain.handle("redditTemplate:generate", async (event, { caseId }) => {
     manifest: fileInfo(path.join(folder, "reddit_template_manifest.md"))
   };
   return { ...result, command: cmd.text, cwd: cmd.cwd, stdout, stderr, log_path: logPath, outputs };
+});
+
+ipcMain.handle("evidenceVideo:export", async (event, { caseId, format }) => {
+  const config = loadConfig();
+  await fsp.mkdir(logDir(), { recursive: true });
+  const selectedFormat = format || "all";
+  const logPath = path.join(logDir(), `${caseId}_evidence_video_${selectedFormat}_${Date.now()}.log`);
+  const cmd = backendCommand(config, "export-evidence-video", ["--case-id", caseId, "--format", selectedFormat]);
+  event.sender.send("tracking:log", { caseId, text: `COMMAND ${cmd.text}\nCWD ${cmd.cwd}\n` });
+  const result = await runCommandCapture(cmd.command, cmd.args, cmd.cwd, logPath, (text) => {
+    event.sender.send("tracking:log", { caseId, text });
+  });
+  const folder = reportPath(caseId, "video_exports");
+  const outputs = {
+    folder: fileInfo(folder),
+    manifest: fileInfo(path.join(folder, "video_export_manifest.json")),
+    video_16x9: fileInfo(path.join(folder, `${caseId}_16x9.mp4`)),
+    video_9x16: fileInfo(path.join(folder, `${caseId}_9x16.mp4`)),
+    video_1x1: fileInfo(path.join(folder, `${caseId}_1x1.mp4`))
+  };
+  const ok = result.code === 0 && outputs.manifest.exists && (
+    outputs.video_16x9.exists || outputs.video_9x16.exists || outputs.video_1x1.exists
+  );
+  if (!ok) {
+    event.sender.send("tracking:log", { caseId, text: `Evidence video export failed: ${result.stderr || result.stdout || result.error || "required outputs were not generated"}\n` });
+  } else {
+    event.sender.send("tracking:log", { caseId, text: "Evidence video export complete\n" });
+  }
+  return { ...result, ok, command: cmd.text, cwd: cmd.cwd, log_path: logPath, outputs };
 });
 
 ipcMain.handle("srv:run", async (event, { caseId }) => {

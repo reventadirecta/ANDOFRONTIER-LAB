@@ -34,6 +34,7 @@ MODULE_COMMANDS = {
     "run-autoencoder": "scripts.run_track_autoencoder_analysis",
     "generate-unified-report": "scripts.generate_unified_case_report",
     "generate-reddit-template": "scripts.generate_reddit_post_template",
+    "export-evidence-video": "scripts.export_evidence_video",
 }
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}

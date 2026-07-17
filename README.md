@@ -11,7 +11,7 @@ Normal users should download the Windows release from GitHub Releases, run `Ando
 Expected release asset:
 
 ```text
-AndoFrontier-Lab-v0.3-Windows.zip
+AndoFrontier-Lab-v0.3.1-Windows.zip
 ```
 
 The Windows release is designed so users do not need to install Node, run `npm install`, create a Python virtual environment, or manually configure Python.
@@ -33,6 +33,7 @@ Public modules:
 - autoencoder baseline
 - unified case report
 - public Reddit technical template
+- evidence/review video export in 16:9, 9:16, and 1:1 formats
 
 ## Public Scope
 
@@ -40,8 +41,9 @@ This public release cuts at:
 
 1. Unified Case Report
 2. Public Summary / Reddit Technical Template
+3. Evidence Video Export assembled only from existing local analysis outputs
 
-No original videos, heavy outputs, private reports, generated publication clips, local machine paths, secrets, local configs, or private publication automation are included.
+No original videos, heavy outputs, private reports, promotional publication clips, local machine paths, secrets, local configs, or private publication automation are included. Evidence videos are generated locally, remain ignored by Git, and carry an explicit no-origin-claim notice.
 
 ## What This Is Not
 

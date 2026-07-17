@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-1. Download `AndoFrontier-Lab-v0.3-Windows.zip` from GitHub Releases.
+1. Download `AndoFrontier-Lab-v0.3.1-Windows.zip` from GitHub Releases.
 2. Unzip it to a normal folder, for example `Documents\AndoFrontier Lab`.
 3. Run `AndoFrontier Lab.exe`.
 4. Click `Import Video`.
@@ -13,6 +13,7 @@
 9. Run analyses.
 10. Generate Unified Case Report.
 11. Generate Public Summary if needed.
+12. Optionally export a local evidence/review video; exported MP4 files are generated outputs and are not included in the source repository.
 
 ## Important Notes
 
@@ -34,6 +35,7 @@
 7. Run analyses.
 8. Generate Unified Case Report.
 9. Generate Public Summary if needed.
+10. Optionally export a local evidence/review video.
 
 The app copies imported videos into the local portable runtime folder. It does not depend on the original file path after import.
 
