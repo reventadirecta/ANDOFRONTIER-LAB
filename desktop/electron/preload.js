@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("forensicDesk", {
   runAutoencoderAnalysis: (payload) => ipcRenderer.invoke("autoencoder:run", payload),
   generateUnifiedReport: (payload) => ipcRenderer.invoke("unifiedReport:generate", payload),
   generateRedditTemplate: (payload) => ipcRenderer.invoke("redditTemplate:generate", payload),
+  exportEvidenceVideo: (payload) => ipcRenderer.invoke("evidenceVideo:export", payload),
   saveValidation: (payload) => ipcRenderer.invoke("validation:save", payload),
   openPath: (targetPath) => ipcRenderer.invoke("path:open", targetPath),
   onTrackingLog: (handler) => {

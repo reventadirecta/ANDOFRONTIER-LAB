@@ -10,6 +10,8 @@ const required = [
   path.join(root, "src", "renderer.js"),
   path.join(root, "src", "index.html"),
   path.join(repoRoot, "lab", "scripts", "generate_reddit_post_template.py"),
+  path.join(repoRoot, "lab", "scripts", "export_evidence_video.py"),
+  path.join(repoRoot, "lab", "uap_forensics", "evidence_video_export.py"),
   path.join(repoRoot, "lab", "scripts", "check_public_release_safety.py")
 ];
 

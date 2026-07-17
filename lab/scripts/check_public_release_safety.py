@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LOCAL_USERNAME_PATTERN = "pm" + "cga"
+LOCAL_USERNAME = os.environ.get("USERNAME", "").strip()
 
 SKIP_DIRS = {
     ".git",
@@ -51,7 +52,6 @@ SKIP_SUFFIXES = {
 
 PATTERNS = [
     ("CRITICAL", "windows_user_path", re.compile(r"C:\\Users\\", re.IGNORECASE)),
-    ("CRITICAL", "personal_username", re.compile(re.escape(LOCAL_USERNAME_PATTERN), re.IGNORECASE)),
     ("CRITICAL", "workspace_absolute_path", re.compile(r"C:\\Workspaces", re.IGNORECASE)),
     ("CRITICAL", "private_input_folder", re.compile(r"uap desclafisicados", re.IGNORECASE)),
     ("CRITICAL", "env_file_reference", re.compile(r"(^|[\\/])\.env($|[\s`'\"])", re.IGNORECASE)),
@@ -66,6 +66,9 @@ PATTERNS = [
     ("HIGH", "tiktok_reference", re.compile(r"TikTok", re.IGNORECASE)),
     ("HIGH", "youtube_tags_reference", re.compile(r"YouTube tags", re.IGNORECASE)),
 ]
+
+if len(LOCAL_USERNAME) >= 3:
+    PATTERNS.append(("CRITICAL", "personal_username", re.compile(re.escape(LOCAL_USERNAME), re.IGNORECASE)))
 
 ALLOWLIST = {
     Path("lab/scripts/check_public_release_safety.py"),

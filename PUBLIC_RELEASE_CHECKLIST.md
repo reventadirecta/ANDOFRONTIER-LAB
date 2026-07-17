@@ -7,7 +7,8 @@ Use this before any push or public release.
 - [ ] No local paths are present in public files.
 - [ ] No `.env`, token, secret, local config, or personal data is tracked.
 - [ ] No private publication automation is exposed in the app.
-- [ ] Public workflow ends at Unified Case Report and Reddit Technical Template.
+- [ ] Public workflow ends at Unified Case Report, Reddit Technical Template, and local evidence/review video export.
+- [ ] Evidence video outputs remain ignored and contain an explicit no-origin-claim notice.
 - [ ] README states no origin claim and no proof engine.
 - [ ] `PRIVATE_MODULES.md` documents private-local-only modules.
 - [ ] Safety check passes:
